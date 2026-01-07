@@ -1,7 +1,17 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { X, Mic, Send, MessageSquare, MicOff, Volume2, Loader2, Sparkles } from 'lucide-react';
-import { supabase } from '../src/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
+
+// Supabase Init
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Debug: Expose to window
+if (typeof window !== 'undefined') {
+  (window as any).supabase = supabase;
+}
 
 interface VoiceSupportProps {
   isOpen: boolean;
@@ -165,6 +175,14 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
 
             sourceRef.current = source;
             processorRef.current = processor;
+          },
+          oncalleredit: (edit) => {
+            // If there's a voice transcript for the user, save it
+            const userText = edit.modelTurn?.parts?.find(p => p.text)?.text;
+            if (userText) {
+              setMessages(prev => [...prev, { role: 'user', text: userText }]);
+              saveMessageToSupabase('user', userText, 'voice');
+            }
           },
           onmessage: async (msg: LiveServerMessage) => {
             const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
