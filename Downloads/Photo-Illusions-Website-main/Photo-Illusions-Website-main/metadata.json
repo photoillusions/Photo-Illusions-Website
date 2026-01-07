@@ -1,0 +1,7 @@
+{
+  "name": "Photo Illusions",
+  "description": "A luxury On-Site Digital Photography Studio website.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
