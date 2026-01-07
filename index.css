@@ -1,1 +1,7 @@
-import './index.css';
+@import "tailwindcss";
+
+/* Custom font families */
+@theme {
+  --font-sans: 'Montserrat', sans-serif;
+  --font-serif: 'Playfair Display', serif;
+}
