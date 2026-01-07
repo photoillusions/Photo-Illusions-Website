@@ -1,72 +1,20 @@
-# Photo Illusions Website
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-Premium On-Site Digital Photography Studio website with AI-powered chat support.
+# Run and deploy your AI Studio app
 
-## Local Development
+This contains everything you need to run your app locally.
+
+View your app in AI Studio: https://ai.studio/apps/drive/1yBjOwOJL_OtV4Fy74O_bdpk_s9Lg9Ypc
+
+## Run Locally
+
+**Prerequisites:**  Node.js
+
 
 1. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-2. Set your Gemini API key in `.env.local`:
-   ```
-   VITE_GEMINI_API_KEY=your_api_key_here
-   ```
-
-3. Run the dev server:
-   ```bash
-   npm run dev
-   ```
-
-## Deploy to Render
-
-### Option 1: Static Site (Recommended)
-
-1. Push this repo to GitHub
-2. Go to [Render Dashboard](https://dashboard.render.com)
-3. Click **New** → **Static Site**
-4. Connect your GitHub repo
-5. Configure:
-   - **Build Command:** `npm install && npm run build`
-   - **Publish Directory:** `dist`
-6. Add Environment Variable:
-   - Key: `VITE_GEMINI_API_KEY`
-   - Value: Your Gemini API key
-7. Click **Create Static Site**
-
-### Option 2: Connect Existing Repo
-
-If you already have a Render site:
-1. Go to your site's **Settings**
-2. Update Build Command to: `npm install && npm run build`
-3. Update Publish Directory to: `dist`
-4. Add `VITE_GEMINI_API_KEY` in **Environment** section
-5. Trigger a manual deploy
-
-## Project Structure
-
-```
-├── components/
-│   ├── Navbar.tsx
-│   ├── Hero.tsx
-│   ├── Gallery.tsx
-│   ├── Contact.tsx
-│   ├── Footer.tsx
-│   └── VoiceSupport.tsx
-├── App.tsx
-├── index.tsx
-├── index.css
-├── index.html
-├── geminiService.ts
-├── vite.config.ts
-└── package.json
-```
-
-## Features
-
-- On-Site Photo Booth services
-- AI-powered chat support (Gemini)
-- Responsive design
-- Image gallery with Google Drive integration
-- Contact form linking to registration
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`
