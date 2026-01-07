@@ -17,5 +17,13 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, '.'),
     }
+  },
+  optimizeDeps: {
+    include: ['@supabase/supabase-js']
+  },
+  build: {
+    commonjsOptions: {
+      include: [/node_modules/]
+    }
   }
 });
