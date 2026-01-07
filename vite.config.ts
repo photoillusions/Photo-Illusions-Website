@@ -1,11 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite' // Add this line
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [
     react(),
-    tailwindcss() // Add this line
+    tailwindcss()
   ],
-  base: '/Photo-Illusions-Website/', 
+  base: '/Photo-Illusions-Website/',
 })
