@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { X, Mic, Send, MessageSquare, MicOff, Volume2, Loader2, Sparkles } from 'lucide-react';
-import { supabase } from '../src/supabaseClient';
+import { supabase } from '../supabaseClient';
 
 interface VoiceSupportProps {
   isOpen: boolean;
@@ -184,8 +184,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
               saveMessageToSupabase('model', modelText, 'voice');
             }
 
-            // Capture user transcript if present (from input_audio_buffer.speech_started or similar)
-            // Note: Gemini Live API provides transcripts in serverContent for user speech
+            // Capture user transcript if present
             const userTranscript = msg.serverContent?.inputTranscript;
             if (userTranscript) {
               setMessages(prev => [...prev, { role: 'user', text: userTranscript }]);

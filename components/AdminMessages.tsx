@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../src/supabaseClient';
+import { supabase } from '../supabaseClient';
 import { MessageSquare, Clock, ArrowLeft, RefreshCw } from 'lucide-react';
 
 interface Interaction {
