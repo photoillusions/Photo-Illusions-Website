@@ -1,9 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-// This pulls the keys from your .env file automatically
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-// Add this line temporarily to test in your browser console
-(window as any).supabase = supabase;
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase credentials not found. Messages will not be saved.');
+}
+
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key'
+);
+
+// Debug: Expose to window in development
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
+  (window as any).supabase = supabase;
+}
