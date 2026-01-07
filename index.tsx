@@ -14,10 +14,3 @@ root.render(
     <App />
   </React.StrictMode>
 );
-<button onClick={async () => {
-  const { data, error } = await supabase.from('customer_prompts').select('*').limit(1);
-  if (error) alert("❌ Error: " + error.message);
-  else console.log("✅ Success! Data:", data);
-}}>
-  Test Database Connection
-</button>
