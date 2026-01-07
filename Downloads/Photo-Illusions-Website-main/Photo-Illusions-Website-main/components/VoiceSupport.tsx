@@ -101,7 +101,14 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
 
   const saveMessageToSupabase = async (role: 'user' | 'model', text: string, chatMode: 'voice' | 'text') => {
     try {
-      const { error } = await supabase
+      // @ts-ignore - access private prop for debugging
+      const baseUrl = supabase.supabaseUrl;
+      console.log('--- Supabase Debug Info ---');
+      console.log('Supabase URL configured:', baseUrl ? 'Yes (starts with ' + baseUrl.substring(0, 10) + '...)' : 'No');
+      console.log('Session ID:', sessionId);
+      console.log('Inserting message:', { role, chatMode, textSnippet: text.substring(0, 20) + '...' });
+
+      const { data, error, status, statusText } = await supabase
         .from('voice_support_interactions')
         .insert([
           {
@@ -112,9 +119,14 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
           }
         ]);
 
-      if (error) throw error;
+      console.log('Supabase response status:', status, statusText);
+      if (error) {
+        console.error('Supabase error detail:', JSON.stringify(error, null, 2));
+      } else {
+        console.log('Supabase insert successful!');
+      }
     } catch (err) {
-      console.error('Error saving to Supabase:', err);
+      console.error('CRITICAL: Unexpected error in saveMessageToSupabase:', err);
     }
   };
 
