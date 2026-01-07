@@ -11,7 +11,7 @@ Premium On-Site Digital Photography Studio website with AI-powered chat support.
 
 2. Set your Gemini API key in `.env.local`:
    ```
-   GEMINI_API_KEY=your_api_key_here
+   VITE_GEMINI_API_KEY=your_api_key_here
    ```
 
 3. Run the dev server:
@@ -31,7 +31,7 @@ Premium On-Site Digital Photography Studio website with AI-powered chat support.
    - **Build Command:** `npm install && npm run build`
    - **Publish Directory:** `dist`
 6. Add Environment Variable:
-   - Key: `GEMINI_API_KEY`
+   - Key: `VITE_GEMINI_API_KEY`
    - Value: Your Gemini API key
 7. Click **Create Static Site**
 
@@ -41,7 +41,7 @@ If you already have a Render site:
 1. Go to your site's **Settings**
 2. Update Build Command to: `npm install && npm run build`
 3. Update Publish Directory to: `dist`
-4. Add `GEMINI_API_KEY` in **Environment** section
+4. Add `VITE_GEMINI_API_KEY` in **Environment** section
 5. Trigger a manual deploy
 
 ## Project Structure
