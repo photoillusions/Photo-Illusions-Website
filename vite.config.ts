@@ -1,9 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite' // Add this line
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  // Set base to your repository name between slashes
+  plugins: [
+    react(),
+    tailwindcss() // Add this line
+  ],
   base: '/Photo-Illusions-Website/', 
 })
