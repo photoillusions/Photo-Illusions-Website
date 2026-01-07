@@ -12,6 +12,8 @@ const SYSTEM_INSTRUCTION = `You are the AI Voice Assistant for Photo Illusions, 
 Your persona is Friendly, Professional, Excited, and Confident.
 Keep your answers short, clear, and concise. Do not give long explanations.
 
+IMPORTANT: After asking a question, wait for the customer to fully respond before speaking again. Give them time to answer, especially for details like email addresses or phone numbers.
+
 Knowledge Base:
 - Services: We are strictly an On-Site Photo Booth, On-Site Digital Photo Printing, and Fashion Event Photography service. We DO NOT cover general event photography.
 - Pricing: The booking fee is $150, plus $10 per 8x10 print.
@@ -23,14 +25,14 @@ Knowledge Base:
 - Booking: To book, please use the Registration Form button in the Contact section of our website.
 
 Booking Workflow:
-If the user expresses interest in booking, checking availability, or joining, you MUST collect the following information ONE BY ONE. Do not ask multiple questions at once. Wait for the user to answer before moving to the next question.
+If the user expresses interest in booking, checking availability, or joining, you MUST collect the following information ONE BY ONE. Do not ask multiple questions at once. Wait for the user to FULLY answer before moving to the next question. Be patient.
 
 1. First Name
 2. Event Title (e.g., Wedding, Gala, Birthday)
 3. Venue Location (City and State)
 4. Date of the Event
 5. Guest Count
-6. Email Address
+6. Email Address (ask them to speak it slowly and clearly)
 
 After collecting all 6 items:
 1. Summarize the details back to the user to confirm they are correct.
@@ -59,8 +61,16 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const nextStartTimeRef = useRef(0);
   
-  // Web Speech API for transcription
-  const recognitionRef = useRef<any>(null);
+  // Audio recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const isRecordingRef = useRef(false);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastAudioLevelRef = useRef(0);
+  const aiAudioChunksRef = useRef<string[]>([]);
+
+  // Gemini session ref
+  const sessionRef = useRef<any>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -76,6 +86,12 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
   }, [isOpen]);
 
   const cleanup = () => {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
@@ -83,27 +99,51 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
     if (outputContextRef.current) outputContextRef.current.close();
     if (processorRef.current) processorRef.current.disconnect();
     if (sourceRef.current) sourceRef.current.disconnect();
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch(e) {}
-      recognitionRef.current = null;
-    }
 
     inputContextRef.current = null;
     outputContextRef.current = null;
     streamRef.current = null;
     processorRef.current = null;
     sourceRef.current = null;
+    mediaRecorderRef.current = null;
+    sessionRef.current = null;
     nextStartTimeRef.current = 0;
+    audioChunksRef.current = [];
+    aiAudioChunksRef.current = [];
+    isRecordingRef.current = false;
     setStatus('idle');
     setMessages([]);
   };
 
-  const saveMessageToSupabase = async (role: 'user' | 'model', text: string, chatMode: 'voice' | 'text') => {
+  const saveAudioToSupabase = async (role: 'user' | 'model', audioBase64: string) => {
+    if (!audioBase64) return;
+    
+    try {
+      console.log(`💾 Saving ${role} audio to Supabase (${Math.round(audioBase64.length / 1024)}KB)`);
+
+      const { error } = await supabase
+        .from('voice_support_interactions')
+        .insert([{
+          session_id: sessionId,
+          role,
+          content: audioBase64,
+          mode: 'voice'
+        }]);
+
+      if (error) {
+        console.error('Supabase error:', error.message);
+      } else {
+        console.log(`✓ ${role} audio saved`);
+      }
+    } catch (err) {
+      console.error('Save error:', err);
+    }
+  };
+
+  const saveTextToSupabase = async (role: 'user' | 'model', text: string, chatMode: 'voice' | 'text') => {
     if (!text || text.trim() === '') return;
     
     try {
-      console.log('💾 Saving to Supabase:', role, '-', text.substring(0, 50));
-
       const { error } = await supabase
         .from('voice_support_interactions')
         .insert([{
@@ -115,59 +155,66 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
 
       if (error) {
         console.error('Supabase error:', error.message);
-      } else {
-        console.log('✓ Saved to Supabase');
       }
     } catch (err) {
       console.error('Save error:', err);
     }
   };
 
-  // Setup Web Speech API for USER transcription only
-  const setupSpeechRecognition = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        // Remove the data URL prefix to get just the base64
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const startUserRecording = () => {
+    if (!streamRef.current || isRecordingRef.current) return;
     
-    if (!SpeechRecognition) {
-      console.warn('Speech Recognition not supported - user voice will not be transcribed');
-      return null;
-    }
+    audioChunksRef.current = [];
+    isRecordingRef.current = true;
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = false; // Only final results
-    recognition.lang = 'en-US';
+    try {
+      const mediaRecorder = new MediaRecorder(streamRef.current, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
 
-    recognition.onresult = (event: any) => {
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          const transcript = event.results[i][0].transcript.trim();
-          if (transcript) {
-            console.log('🎤 User said:', transcript);
-            setMessages(prev => [...prev, { role: 'user', text: transcript }]);
-            saveMessageToSupabase('user', transcript, 'voice');
-          }
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
         }
-      }
-    };
+      };
 
-    recognition.onerror = (event: any) => {
-      if (event.error !== 'aborted' && event.error !== 'no-speech') {
-        console.error('Speech recognition error:', event.error);
-      }
-    };
+      mediaRecorder.onstop = async () => {
+        if (audioChunksRef.current.length > 0) {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const base64 = await blobToBase64(audioBlob);
+          saveAudioToSupabase('user', base64);
+        }
+        audioChunksRef.current = [];
+        isRecordingRef.current = false;
+      };
 
-    recognition.onend = () => {
-      // Auto-restart if still in voice mode and listening
-      if (recognitionRef.current && status !== 'idle') {
-        setTimeout(() => {
-          try {
-            recognitionRef.current?.start();
-          } catch (e) {}
-        }, 100);
-      }
-    };
+      mediaRecorder.start(100); // Collect data every 100ms
+      mediaRecorderRef.current = mediaRecorder;
+      console.log('🎙️ Started recording user audio');
+    } catch (err) {
+      console.error('Failed to start recording:', err);
+    }
+  };
 
-    return recognition;
+  const stopUserRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      console.log('⏹️ Stopped recording user audio');
+    }
   };
 
   const startVoiceSession = async () => {
@@ -182,22 +229,17 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // Setup speech recognition for transcription
-      recognitionRef.current = setupSpeechRecognition();
+      // Track if user is speaking (for 2-second delay)
+      let userSpeakingTimeout: NodeJS.Timeout | null = null;
+      let audioBuffer: { data: string; mimeType: string }[] = [];
+      let isSendingAudio = false;
 
       const session = await ai.live.connect({
         model: 'gemini-2.0-flash-exp',
         callbacks: {
           onopen: () => {
             setStatus('listening');
-
-            // Start speech recognition for transcription
-            if (recognitionRef.current) {
-              try {
-                recognitionRef.current.start();
-                console.log('🎙️ Speech recognition started');
-              } catch (e) {}
-            }
+            startUserRecording();
 
             if (!inputContextRef.current) return;
             const source = inputContextRef.current.createMediaStreamSource(stream);
@@ -205,8 +247,50 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
 
             processor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
+              
+              // Calculate audio level
+              let sum = 0;
+              for (let i = 0; i < inputData.length; i++) {
+                sum += Math.abs(inputData[i]);
+              }
+              const avgLevel = sum / inputData.length;
+              lastAudioLevelRef.current = avgLevel;
+
               const pcmBlob = createBlob(inputData);
-              session.sendRealtimeInput({ media: pcmBlob });
+              
+              // Detect if user is speaking (threshold)
+              const isSpeaking = avgLevel > 0.01;
+              
+              if (isSpeaking) {
+                // User is speaking - buffer the audio
+                audioBuffer.push(pcmBlob);
+                
+                // Clear any existing timeout
+                if (userSpeakingTimeout) {
+                  clearTimeout(userSpeakingTimeout);
+                }
+                
+                // Set new timeout - wait 2 seconds of silence before sending
+                userSpeakingTimeout = setTimeout(() => {
+                  if (audioBuffer.length > 0 && !isSendingAudio) {
+                    isSendingAudio = true;
+                    console.log('📤 Sending buffered audio after 2s silence');
+                    
+                    // Send all buffered audio
+                    audioBuffer.forEach(chunk => {
+                      session.sendRealtimeInput({ media: chunk });
+                    });
+                    audioBuffer = [];
+                    
+                    setTimeout(() => {
+                      isSendingAudio = false;
+                    }, 500);
+                  }
+                }, 2000); // 2 second delay
+              } else if (!isSendingAudio && audioBuffer.length === 0) {
+                // Not speaking and no buffer - send ambient audio to keep connection
+                session.sendRealtimeInput({ media: pcmBlob });
+              }
             };
 
             source.connect(processor);
@@ -216,10 +300,17 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
             processorRef.current = processor;
           },
           onmessage: async (msg: LiveServerMessage) => {
-            // Handle audio data from model - THIS IS THE KEY PART
+            // Handle audio data from model
             const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData && outputContextRef.current) {
               setStatus('speaking');
+              
+              // Stop user recording while AI speaks
+              stopUserRecording();
+              
+              // Collect AI audio for saving
+              aiAudioChunksRef.current.push(audioData);
+
               const audioBuffer = await decodeAudioData(
                 decode(audioData),
                 outputContextRef.current,
@@ -229,36 +320,45 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
               playAudio(audioBuffer);
             }
 
-            // Check for text in the response (for logging/saving)
-            const modelText = msg.serverContent?.modelTurn?.parts?.find(p => p.text)?.text;
-            if (modelText) {
-              console.log('🤖 AI said:', modelText);
-              setMessages(prev => [...prev, { role: 'model', text: modelText }]);
-              saveMessageToSupabase('model', modelText, 'voice');
-            }
-
             if (msg.serverContent?.turnComplete) {
-              setStatus('listening');
+              // Save AI's complete audio response
+              if (aiAudioChunksRef.current.length > 0) {
+                const combinedAudio = aiAudioChunksRef.current.join('');
+                saveAudioToSupabase('model', combinedAudio);
+                aiAudioChunksRef.current = [];
+              }
+              
+              // Resume user recording after a short delay
+              setTimeout(() => {
+                setStatus('listening');
+                startUserRecording();
+              }, 500);
             }
 
             if (msg.serverContent?.interrupted) {
               nextStartTimeRef.current = 0;
+              aiAudioChunksRef.current = [];
               setStatus('listening');
+              startUserRecording();
             }
           },
           onclose: () => {
             setStatus('idle');
+            stopUserRecording();
           },
           onerror: (err) => {
             console.error("Voice Error", err);
+            stopUserRecording();
             setMode('text');
           }
         },
         config: {
-          responseModalities: [Modality.AUDIO], // AUDIO ONLY - this is key!
+          responseModalities: [Modality.AUDIO],
           systemInstruction: SYSTEM_INSTRUCTION,
         }
       });
+
+      sessionRef.current = session;
 
     } catch (err) {
       console.error("Failed to start voice session", err);
@@ -281,7 +381,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
 
     source.onended = () => {
       if (outputContextRef.current && outputContextRef.current.currentTime >= nextStartTimeRef.current) {
-        setStatus('listening');
+        // Audio finished playing
       }
     };
   };
@@ -335,7 +435,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
     const userMessage = inputText.trim();
     const newMessages = [...messages, { role: 'user' as const, text: userMessage }];
     setMessages(newMessages);
-    saveMessageToSupabase('user', userMessage, 'text');
+    saveTextToSupabase('user', userMessage, 'text');
     setInputText('');
     setStatus('speaking');
 
@@ -357,7 +457,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
 
       const text = response.candidates?.[0]?.content?.parts?.[0]?.text || "I'm sorry, I couldn't generate a response.";
       setMessages([...newMessages, { role: 'model', text }]);
-      saveMessageToSupabase('model', text, 'text');
+      saveTextToSupabase('model', text, 'text');
     } catch (err) {
       console.error("Text chat error", err);
       setMessages([...newMessages, { role: 'model', text: "Sorry, I'm having trouble connecting right now." }]);
@@ -411,7 +511,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
                   status === 'connecting' ? "Connecting..." : "Ready"}
               </h2>
               <p className="text-gray-500 text-sm">
-                {status === 'listening' ? "Ask me about prices, New York trips, or missing photos!" :
+                {status === 'listening' ? "Take your time - I'll wait for you to finish." :
                   status === 'speaking' ? "Listen to the answer." : "Please wait a moment."}
               </p>
             </div>
