@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { X, Mic, Send, MessageSquare, MicOff, Volume2, Loader2, Sparkles } from 'lucide-react';
+import { supabase } from '../src/supabaseClient';
 
 interface VoiceSupportProps {
   isOpen: boolean;
@@ -48,6 +49,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
   const [status, setStatus] = useState<'connecting' | 'listening' | 'speaking' | 'idle' | 'error'>('idle');
   const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
   const [inputText, setInputText] = useState('');
+  const [sessionId] = useState(() => crypto.randomUUID());
 
   // Refs for Audio
   const inputContextRef = useRef<AudioContext | null>(null);
@@ -97,6 +99,34 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
     setMessages([]);
   };
 
+  const saveMessageToSupabase = async (role: 'user' | 'model', text: string, chatMode: 'voice' | 'text') => {
+    try {
+      console.log('--- Supabase Debug Info ---');
+      console.log('Session ID:', sessionId);
+      console.log('Inserting message:', { role, chatMode, textSnippet: text.substring(0, 50) + '...' });
+
+      const { data, error, status: httpStatus } = await supabase
+        .from('voice_support_interactions')
+        .insert([
+          {
+            session_id: sessionId,
+            role,
+            content: text,
+            mode: chatMode
+          }
+        ])
+        .select();
+
+      if (error) {
+        console.error('Supabase error:', error.message, error.details, error.hint);
+      } else {
+        console.log('Supabase insert successful!', data);
+      }
+    } catch (err) {
+      console.error('CRITICAL: Unexpected error in saveMessageToSupabase:', err);
+    }
+  };
+
   const startVoiceSession = async () => {
     setStatus('connecting');
     try {
@@ -134,6 +164,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
             processorRef.current = processor;
           },
           onmessage: async (msg: LiveServerMessage) => {
+            // Handle audio data from model
             const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData && outputContextRef.current) {
               setStatus('speaking');
@@ -146,14 +177,26 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
               playAudio(audioBuffer);
             }
 
+            // Capture model text response if present
+            const modelText = msg.serverContent?.modelTurn?.parts?.find(p => p.text)?.text;
+            if (modelText) {
+              setMessages(prev => [...prev, { role: 'model', text: modelText }]);
+              saveMessageToSupabase('model', modelText, 'voice');
+            }
+
+            // Capture user transcript if present (from input_audio_buffer.speech_started or similar)
+            // Note: Gemini Live API provides transcripts in serverContent for user speech
+            const userTranscript = msg.serverContent?.inputTranscript;
+            if (userTranscript) {
+              setMessages(prev => [...prev, { role: 'user', text: userTranscript }]);
+              saveMessageToSupabase('user', userTranscript, 'voice');
+            }
+
             if (msg.serverContent?.turnComplete) {
               setStatus('listening');
             }
 
             if (msg.serverContent?.interrupted) {
-              // Stop playback if user interrupts
-              // Note: Real implementation would need to stop active nodes.
-              // For this demo, we just reset start time and clear visual status
               nextStartTimeRef.current = 0;
               setStatus('listening');
             }
@@ -248,8 +291,10 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
     e.preventDefault();
     if (!inputText.trim()) return;
 
-    const newMessages = [...messages, { role: 'user' as const, text: inputText }];
+    const userMessage = inputText.trim();
+    const newMessages = [...messages, { role: 'user' as const, text: userMessage }];
     setMessages(newMessages);
+    saveMessageToSupabase('user', userMessage, 'text');
     setInputText('');
     setStatus('speaking'); // reuse for 'thinking' state in text mode
 
@@ -265,12 +310,13 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
         config: { systemInstruction: SYSTEM_INSTRUCTION },
         contents: [
           ...chatHistory,
-          { role: 'user', parts: [{ text: inputText }] }
+          { role: 'user', parts: [{ text: userMessage }] }
         ]
       });
 
       const text = response.candidates?.[0]?.content?.parts?.[0]?.text || "I'm sorry, I couldn't generate a response.";
       setMessages([...newMessages, { role: 'model', text }]);
+      saveMessageToSupabase('model', text, 'text');
     } catch (err) {
       console.error("Text chat error", err);
       setMessages([...newMessages, { role: 'model', text: "Sorry, I'm having trouble connecting right now." }]);
