@@ -61,7 +61,6 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
   
   // Web Speech API for transcription
   const recognitionRef = useRef<any>(null);
-  const currentTranscriptRef = useRef<string>('');
 
   useEffect(() => {
     if (isOpen) {
@@ -85,7 +84,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
     if (processorRef.current) processorRef.current.disconnect();
     if (sourceRef.current) sourceRef.current.disconnect();
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try { recognitionRef.current.stop(); } catch(e) {}
       recognitionRef.current = null;
     }
 
@@ -95,7 +94,6 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
     processorRef.current = null;
     sourceRef.current = null;
     nextStartTimeRef.current = 0;
-    currentTranscriptRef.current = '';
     setStatus('idle');
     setMessages([]);
   };
@@ -104,9 +102,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
     if (!text || text.trim() === '') return;
     
     try {
-      console.log('--- Supabase Save ---');
-      console.log('Role:', role, '| Mode:', chatMode);
-      console.log('Content:', text.substring(0, 100) + (text.length > 100 ? '...' : ''));
+      console.log('💾 Saving to Supabase:', role, '-', text.substring(0, 50));
 
       const { error } = await supabase
         .from('voice_support_interactions')
@@ -127,63 +123,47 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  // Setup Web Speech API for transcription
+  // Setup Web Speech API for USER transcription only
   const setupSpeechRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
     if (!SpeechRecognition) {
-      console.warn('Speech Recognition not supported');
+      console.warn('Speech Recognition not supported - user voice will not be transcribed');
       return null;
     }
 
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
-    recognition.interimResults = true;
+    recognition.interimResults = false; // Only final results
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalTranscript += transcript;
-        } else {
-          interimTranscript += transcript;
+          const transcript = event.results[i][0].transcript.trim();
+          if (transcript) {
+            console.log('🎤 User said:', transcript);
+            setMessages(prev => [...prev, { role: 'user', text: transcript }]);
+            saveMessageToSupabase('user', transcript, 'voice');
+          }
         }
-      }
-
-      if (finalTranscript) {
-        console.log('User said:', finalTranscript);
-        currentTranscriptRef.current = finalTranscript;
-        setMessages(prev => [...prev, { role: 'user', text: finalTranscript }]);
-        saveMessageToSupabase('user', finalTranscript, 'voice');
       }
     };
 
     recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
-      // Restart on error (except if aborted)
-      if (event.error !== 'aborted' && status === 'listening') {
-        setTimeout(() => {
-          try {
-            recognition.start();
-          } catch (e) {
-            // Already started
-          }
-        }, 100);
+      if (event.error !== 'aborted' && event.error !== 'no-speech') {
+        console.error('Speech recognition error:', event.error);
       }
     };
 
     recognition.onend = () => {
-      // Restart if still in listening mode
-      if (status === 'listening' && recognitionRef.current) {
-        try {
-          recognition.start();
-        } catch (e) {
-          // Already started
-        }
+      // Auto-restart if still in voice mode and listening
+      if (recognitionRef.current && status !== 'idle') {
+        setTimeout(() => {
+          try {
+            recognitionRef.current?.start();
+          } catch (e) {}
+        }, 100);
       }
     };
 
@@ -205,23 +185,18 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
       // Setup speech recognition for transcription
       recognitionRef.current = setupSpeechRecognition();
 
-      // Buffer to accumulate AI response text
-      let aiResponseBuffer = '';
-
       const session = await ai.live.connect({
         model: 'gemini-2.0-flash-exp',
         callbacks: {
           onopen: () => {
             setStatus('listening');
 
-            // Start speech recognition
+            // Start speech recognition for transcription
             if (recognitionRef.current) {
               try {
                 recognitionRef.current.start();
-                console.log('Speech recognition started');
-              } catch (e) {
-                console.error('Failed to start speech recognition:', e);
-              }
+                console.log('🎙️ Speech recognition started');
+              } catch (e) {}
             }
 
             if (!inputContextRef.current) return;
@@ -241,18 +216,10 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
             processorRef.current = processor;
           },
           onmessage: async (msg: LiveServerMessage) => {
-            // Handle audio data from model
+            // Handle audio data from model - THIS IS THE KEY PART
             const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData && outputContextRef.current) {
               setStatus('speaking');
-              
-              // Pause speech recognition while AI is speaking
-              if (recognitionRef.current) {
-                try {
-                  recognitionRef.current.stop();
-                } catch (e) {}
-              }
-
               const audioBuffer = await decodeAudioData(
                 decode(audioData),
                 outputContextRef.current,
@@ -262,35 +229,20 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
               playAudio(audioBuffer);
             }
 
-            // Try to capture any text the model sends
+            // Check for text in the response (for logging/saving)
             const modelText = msg.serverContent?.modelTurn?.parts?.find(p => p.text)?.text;
             if (modelText) {
-              aiResponseBuffer += modelText;
+              console.log('🤖 AI said:', modelText);
+              setMessages(prev => [...prev, { role: 'model', text: modelText }]);
+              saveMessageToSupabase('model', modelText, 'voice');
             }
 
-            // When turn is complete, save the AI response
             if (msg.serverContent?.turnComplete) {
-              if (aiResponseBuffer) {
-                console.log('AI response:', aiResponseBuffer);
-                setMessages(prev => [...prev, { role: 'model', text: aiResponseBuffer }]);
-                saveMessageToSupabase('model', aiResponseBuffer, 'voice');
-                aiResponseBuffer = '';
-              }
-              
-              // Resume speech recognition
-              setTimeout(() => {
-                setStatus('listening');
-                if (recognitionRef.current) {
-                  try {
-                    recognitionRef.current.start();
-                  } catch (e) {}
-                }
-              }, 500);
+              setStatus('listening');
             }
 
             if (msg.serverContent?.interrupted) {
               nextStartTimeRef.current = 0;
-              aiResponseBuffer = '';
               setStatus('listening');
             }
           },
@@ -303,7 +255,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
           }
         },
         config: {
-          responseModalities: [Modality.AUDIO, Modality.TEXT],
+          responseModalities: [Modality.AUDIO], // AUDIO ONLY - this is key!
           systemInstruction: SYSTEM_INSTRUCTION,
         }
       });
@@ -329,7 +281,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
 
     source.onended = () => {
       if (outputContextRef.current && outputContextRef.current.currentTime >= nextStartTimeRef.current) {
-        // Audio finished
+        setStatus('listening');
       }
     };
   };
@@ -459,21 +411,10 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
                   status === 'connecting' ? "Connecting..." : "Ready"}
               </h2>
               <p className="text-gray-500 text-sm">
-                {status === 'listening' ? "Ask me about prices, services, or booking!" :
+                {status === 'listening' ? "Ask me about prices, New York trips, or missing photos!" :
                   status === 'speaking' ? "Listen to the answer." : "Please wait a moment."}
               </p>
             </div>
-
-            {/* Show recent messages */}
-            {messages.length > 0 && (
-              <div className="w-full max-h-24 overflow-y-auto text-xs text-gray-500 bg-white/50 rounded-lg p-2">
-                {messages.slice(-2).map((msg, i) => (
-                  <p key={i} className={msg.role === 'user' ? 'text-blue-600' : 'text-gray-600'}>
-                    <strong>{msg.role === 'user' ? 'You' : 'AI'}:</strong> {msg.text.substring(0, 50)}...
-                  </p>
-                ))}
-              </div>
-            )}
 
             <button onClick={() => setMode('text')} className="text-sm text-blue-600 underline mt-4 hover:text-blue-800">
               Switch to Text Chat
