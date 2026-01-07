@@ -16,7 +16,6 @@ permissions:
   id-token: write
 
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -31,21 +30,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-- uses: actions/setup-node@v4 # or @v6
-  with:
-    node-version: '20'
-    package-manager-cache: false # Disable caching that requires a lock file
-    - name: Install dependencies
-        run: npm install
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # This disables the check for package-lock.json or yarn.lock
+          package-manager-cache: false 
+
+      - name: Install dependencies
+        # 'npm install' works even without a lock file
+        run: npm install 
+
       - name: Build
         run: npm run build
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           # Upload entire dist folder produced by Vite
           path: './dist'
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
