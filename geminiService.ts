@@ -11,7 +11,7 @@ export const generatePhotoboothStrip = async (prompt: string): Promise<string> =
     Do not include text inside the photos.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-2.0-flash-exp',
       contents: {
         parts: [
           { text: fullPrompt }
@@ -25,13 +25,13 @@ export const generatePhotoboothStrip = async (prompt: string): Promise<string> =
     });
 
     let imageUrl = '';
-    
+
     // Iterate through parts to find the image
     if (response.candidates?.[0]?.content?.parts) {
       for (const part of response.candidates[0].content.parts) {
         if (part.inlineData) {
           imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-          break; 
+          break;
         }
       }
     }
