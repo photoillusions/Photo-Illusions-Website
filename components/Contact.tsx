@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLink, AlertCircle } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 
 const Contact: React.FC = () => {
     return (
@@ -11,17 +11,12 @@ const Contact: React.FC = () => {
                 </div>
                 
                 <div className="bg-white p-8 md:p-12 rounded-2xl shadow-xl border border-gray-100 text-center space-y-8">
-                     {/* Service Notice */}
+                     {/* Updated Service Notice Section */}
                     <div className="bg-blue-50 border border-blue-100 p-6 rounded-lg">
-                        <div className="flex flex-col items-center gap-3">
-                            <AlertCircle className="text-blue-600" size={32} />
-                            <div>
-                                <p className="text-gray-700 text-lg leading-relaxed max-w-2xl mx-auto">
-                                    We are an <strong>On-Site Digital Photographer Printers and Designers</strong>. 
-                                    We do not Cover Events. We Set up at events and Print Professional Photos for the Guests.
-                                </p>
-                            </div>
-                        </div>
+                        <p className="text-gray-700 text-lg leading-relaxed max-w-2xl mx-auto">
+                            We are an <strong>On-Site Digital Photographer Printers and Designers</strong>. 
+                            We do not Cover Events. We Set up at events and Print Professional Photos for the Guests.
+                        </p>
                     </div>
 
                     <div className="py-4">
