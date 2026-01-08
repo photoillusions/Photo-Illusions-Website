@@ -12,12 +12,6 @@ const SYSTEM_INSTRUCTION = `You are the AI Voice Assistant for Photo Illusions, 
 Your persona is Friendly, Professional, Excited, and Confident.
 Keep your answers short, clear, and concise. Do not give long explanations.
 
-IMPORTANT RULES FOR CONVERSATION PACING:
-- After asking ANY question, WAIT for the customer to fully respond before speaking again.
-- Give customers plenty of time to think and answer, especially for details like email addresses, phone numbers, or dates.
-- Never interrupt or rush the customer.
-- If collecting information like an email address, ask them to spell it out slowly and clearly.
-
 Knowledge Base:
 - Services: We are strictly an On-Site Photo Booth, On-Site Digital Photo Printing, and Fashion Event Photography service. We DO NOT cover general event photography.
 - Pricing: The booking fee is $150, plus $10 per 8x10 print.
@@ -29,17 +23,17 @@ Knowledge Base:
 - Booking: To book, please use the Registration Form button in the Contact section of our website.
 
 Booking Workflow:
-If the user expresses interest in booking, checking availability, or joining, you MUST collect the following information ONE BY ONE. Do not ask multiple questions at once. Wait patiently for the user to FULLY answer before moving to the next question.
+If the user expresses interest in booking, checking availability, or joining, you MUST collect the following information ONE BY ONE. Do not ask multiple questions at once. Wait for the user to answer before moving to the next question.
 
 1. First Name
 2. Event Title (e.g., Wedding, Gala, Birthday)
 3. Venue Location (City and State)
 4. Date of the Event
 5. Guest Count
-6. Email Address - Ask them to spell it out letter by letter for accuracy
+6. Email Address
 
 After collecting all 6 items:
-1. Repeat back each detail to confirm accuracy.
+1. Summarize the details back to the user to confirm they are correct.
 2. Instruct the user to please submit the official Booking Form on the website to finalize the request.
 
 Rules:
@@ -50,8 +44,8 @@ Rules:
 
 If the user asks something else, answer briefly and professionally acting as a helpful representative of Photo Illusions.`;
 
-// 3 SECOND DELAY - Time to wait after user stops speaking
-const SILENCE_DELAY_MS = 3000;
+// 2 SECOND DELAY
+const SILENCE_DELAY_MS = 2000;
 
 const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
   const [mode, setMode] = useState<'voice' | 'text'>('voice');
@@ -194,13 +188,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
     isRecordingRef.current = true;
 
     try {
-      // Use higher quality settings
-      const options: MediaRecorderOptions = {
-        mimeType: 'audio/webm;codecs=opus',
-        audioBitsPerSecond: 128000
-      };
-      
-      const mediaRecorder = new MediaRecorder(streamRef.current, options);
+      const mediaRecorder = new MediaRecorder(streamRef.current);
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -211,7 +199,6 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
       mediaRecorder.onstop = async () => {
         if (audioChunksRef.current.length > 0) {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          // Only save if audio is substantial (more than 1KB)
           if (audioBlob.size > 1024) {
             const base64 = await blobToBase64(audioBlob);
             saveAudioToSupabase('user', base64);
@@ -223,33 +210,9 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
 
       mediaRecorder.start(100);
       mediaRecorderRef.current = mediaRecorder;
-      console.log('🎙️ Recording user audio (high quality)');
+      console.log('🎙️ Recording user audio');
     } catch (err) {
       console.error('Failed to start recording:', err);
-      // Fallback to default settings
-      try {
-        const mediaRecorder = new MediaRecorder(streamRef.current);
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
-        mediaRecorder.onstop = async () => {
-          if (audioChunksRef.current.length > 0) {
-            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-            if (audioBlob.size > 1024) {
-              const base64 = await blobToBase64(audioBlob);
-              saveAudioToSupabase('user', base64);
-            }
-          }
-          audioChunksRef.current = [];
-          isRecordingRef.current = false;
-        };
-        mediaRecorder.start(100);
-        mediaRecorderRef.current = mediaRecorder;
-      } catch (fallbackErr) {
-        console.error('Fallback recording also failed:', fallbackErr);
-      }
     }
   };
 
@@ -269,13 +232,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
       inputContextRef.current = new AudioContextClass({ sampleRate: 16000 });
       outputContextRef.current = new AudioContextClass({ sampleRate: 24000 });
 
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 16000
-        } 
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
       const session = await ai.live.connect({
@@ -316,13 +273,13 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
               } else {
                 // User is silent
                 if (audioBufferRef.current.length > 0 && !silenceTimerRef.current && !isSendingRef.current) {
-                  // Start 3-second silence timer
-                  console.log('🔇 Silence detected, starting 3-second timer...');
+                  // Start 2-second silence timer
+                  console.log('🔇 Silence detected, starting 2-second timer...');
                   
                   silenceTimerRef.current = setTimeout(() => {
                     if (audioBufferRef.current.length > 0 && !isSendingRef.current) {
                       isSendingRef.current = true;
-                      console.log(`📤 Sending ${audioBufferRef.current.length} audio chunks after 3s silence`);
+                      console.log(`📤 Sending ${audioBufferRef.current.length} audio chunks after 2s silence`);
                       
                       // Send all buffered audio to Gemini
                       audioBufferRef.current.forEach(chunk => {
@@ -565,7 +522,7 @@ const VoiceSupport: React.FC<VoiceSupportProps> = ({ isOpen, onClose }) => {
                   status === 'connecting' ? "Connecting..." : "Ready"}
               </h2>
               <p className="text-gray-500 text-sm">
-                {status === 'listening' ? "Take your time - I'll wait for you to finish." :
+                {status === 'listening' ? "Ask me about prices, New York trips, or missing photos!" :
                   status === 'speaking' ? "Listen to the answer." : "Please wait a moment."}
               </p>
             </div>
