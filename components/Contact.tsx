@@ -16,10 +16,9 @@ const Contact: React.FC = () => {
                         <div className="flex flex-col items-center gap-3">
                             <AlertCircle className="text-blue-600" size={32} />
                             <div>
-                                <h3 className="text-xl font-bold text-gray-900 mb-2">Service Notice</h3>
-                                <p className="text-gray-600 leading-relaxed max-w-2xl mx-auto">
-                                    We are strictly an <strong>On-Site Photo Booth</strong>, <strong>On-Site Digital Photo Printing</strong>, and <strong>Fashion Event Photography</strong> service. 
-                                    <br/><span className="text-sm italic text-gray-500">(We do not provide general event roaming photography coverage)</span>
+                                <p className="text-gray-700 text-lg leading-relaxed max-w-2xl mx-auto">
+                                    We are an <strong>On-Site Digital Photographer Printers and Designers</strong>. 
+                                    We do not Cover Events. We Set up at events and Print Professional Photos for the Guests.
                                 </p>
                             </div>
                         </div>
