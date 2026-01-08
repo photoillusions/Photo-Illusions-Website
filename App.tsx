@@ -152,7 +152,7 @@ const App: React.FC = () => {
               {[
                 { title: 'On-Site Photo Booth', desc: 'Interactive photo experiences with instant digital sharing and fun props.' },
                 { title: 'On-Site Digital Printing', desc: 'Professional 8x10 prints produced immediately at your event.' },
-                { title: 'Daycare Center Photography', desc: 'Professional on-site portraits and instant printing services for schools and childcare centers.' }
+                { title: 'Daycare Center Photography', desc: 'Professional childcare portraits for schools and childcare centers.' }
               ].map((service, i) => (
                 <div key={i} className="p-8 border border-gray-200 hover:border-blue-500 transition-all duration-300 group bg-gray-50 hover:bg-white hover:shadow-xl rounded-lg flex flex-col justify-center">
                   <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">{service.title}</h3>
