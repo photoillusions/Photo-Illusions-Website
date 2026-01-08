@@ -8,8 +8,6 @@ import VoiceSupport from './components/VoiceSupport';
 import AdminMessages from './components/AdminMessages';
 import { MessageCircle, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
 
-// Admin password - change this to your desired password
-// For better security, use an environment variable: import.meta.env.VITE_ADMIN_PASSWORD
 const ADMIN_PASSWORD = 'PhotoIllusions2026';
 
 const App: React.FC = () => {
@@ -20,7 +18,6 @@ const App: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
-  // Check for existing session
   useEffect(() => {
     const session = sessionStorage.getItem('adminAuth');
     if (session === 'true') {
@@ -28,7 +25,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Handle URL hash for admin access
   useEffect(() => {
     const handleHash = () => {
       if (window.location.hash === '#admin') {
@@ -66,7 +62,6 @@ const App: React.FC = () => {
     setShowAdmin(false);
   };
 
-  // Admin Shield - Password Gate
   if (showAdmin && !isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
@@ -125,7 +120,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Authenticated Admin View
   if (showAdmin && isAuthenticated) {
     return (
       <div className="relative">
@@ -133,7 +127,6 @@ const App: React.FC = () => {
           window.location.hash = '';
           setShowAdmin(false);
         }} />
-        {/* Logout button */}
         <button
           onClick={handleLogout}
           className="fixed top-4 right-4 z-50 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-all"
@@ -159,9 +152,9 @@ const App: React.FC = () => {
               {[
                 { title: 'On-Site Photo Booth', desc: 'Interactive photo experiences with instant digital sharing and fun props.' },
                 { title: 'On-Site Digital Printing', desc: 'Professional 8x10 prints produced immediately at your event.' },
-                { title: 'Fashion Event Photography', desc: 'High-end fashion style photography stations for your guests.' }
+                { title: 'Daycare Center Photography', desc: 'Professional on-site portraits and instant printing services for schools and childcare centers.' }
               ].map((service, i) => (
-                <div key={i} className="p-8 border border-gray-200 hover:border-blue-500 transition-all duration-300 group bg-gray-50 hover:bg-white hover:shadow-xl rounded-lg">
+                <div key={i} className="p-8 border border-gray-200 hover:border-blue-500 transition-all duration-300 group bg-gray-50 hover:bg-white hover:shadow-xl rounded-lg flex flex-col justify-center">
                   <h3 className="text-xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors">{service.title}</h3>
                   <p className="text-gray-600 leading-relaxed">{service.desc}</p>
                 </div>
@@ -177,9 +170,7 @@ const App: React.FC = () => {
 
       <Footer />
 
-      {/* Floating Chat Widget */}
       <div className="fixed bottom-8 right-8 z-40 flex flex-col items-end gap-3">
-        {/* Hidden-ish Admin Toggle */}
         <button
           onClick={() => {
             window.location.hash = 'admin';
